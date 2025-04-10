@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# VS Code
+.vscode/
+
+# Mac 系統垃圾
+.DS_Store
+
+# Streamlit
+.streamlit/credentials.toml
+.streamlit/config.toml
+
+# 虛擬環境（如果你使用 venv）
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 資料檔 / 資料庫
+*.db
+*.sqlite
+*.csv
+*.xlsx
+
+# 敏感資訊（例如 .env 存密碼）
+.env
