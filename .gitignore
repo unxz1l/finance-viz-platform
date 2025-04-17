@@ -16,6 +16,7 @@ __pycache__/
 # 虛擬環境（如果你使用 venv）
 venv/
 env/
+.venv/
 
 # Jupyter
 .ipynb_checkpoints/
