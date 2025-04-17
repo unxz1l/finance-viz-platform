@@ -2,3 +2,5 @@ streamlit>=1.30
 pandas
 numpy
 matplotlib
+requests
+tqdm
