@@ -1,23 +1,53 @@
 import streamlit as st
-from modules.data_loader import load_financial_data
-from modules.indicators import calculate_roe
-from modules.visualizer import plot_indicator
 
-# app.py
-import streamlit as st
+# Page configuration
+st.set_page_config(
+    page_title="Finance Visualization Platform",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.set_page_config(page_title="財務視覺化平台", layout="wide")
-
-st.title("📊 財務指標視覺化平台")
+# Main title and description
+st.title("📊 Finance Visualization Platform")
 st.markdown("""
-歡迎使用本平台，我們提供簡單直觀的方式，幫助您理解一家公司的財務健康狀況與投資風險。
-
-請從左側選單選擇頁面開始操作。
+Welcome to the Finance Visualization Platform! This platform provides comprehensive tools for:
+- Market analysis and visualization
+- Portfolio tracking and analysis
+- Company-specific financial metrics
+- Risk assessment and management
 """)
 
-company = st.selectbox("選擇公司", ["王品", "八方雲集"])
-df = load_financial_data(company)
+# Navigation cards
+col1, col2, col3 = st.columns(3)
 
-roe = calculate_roe(df)
-fig = plot_indicator(df, roe, "ROE")
-st.pyplot(fig)
+with col1:
+    st.markdown("### 📈 Market Overview")
+    st.markdown("""
+    - Real-time market indices
+    - Sector performance analysis
+    - Market trends and patterns
+    """)
+    st.page_link("pages/dashboard.py", label="Go to Dashboard →")
+
+with col2:
+    st.markdown("### 💼 Portfolio Analysis")
+    st.markdown("""
+    - Portfolio performance tracking
+    - Asset allocation visualization
+    - Historical performance analysis
+    """)
+    st.page_link("pages/dashboard.py", label="Go to Dashboard →")
+
+with col3:
+    st.markdown("### 🏢 Company Analysis")
+    st.markdown("""
+    - Company financial metrics
+    - Stock performance analysis
+    - Fundamental analysis tools
+    """)
+    st.page_link("pages/company_analysis.py", label="Go to Company Analysis →")
+
+# Footer
+st.markdown("---")
+st.markdown("© 2024 Finance Visualization Platform")

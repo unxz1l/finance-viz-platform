@@ -17,6 +17,7 @@ A **Streamlit**‑based application that helps *non‑professional investors* vi
 | 🔍 | **Company & Fiscal Year Selection** | 下拉選單快速選擇公司（如 2727 Wowprime、1262 Kanpai）與財報年度／季度 |
 | 📈 | **Multi‑year Trend Charts** | 顯示近 5 – 10 年核心財務指標折線圖（ROE、營收 YoY、營業淨利 YoY…） |
 | 🧠 | **Auto Insight Generation** | 一鍵與前期比較，產出亮點／風險語句 |
+| 📊 | **Interactive Visualizations** | 互動式圖表，支援縮放、平移、數據點懸停等操作 |
 
 ---
 
@@ -25,7 +26,7 @@ A **Streamlit**‑based application that helps *non‑professional investors* vi
 - **Python 3.9+**
 - **Streamlit** (for UI)
 - **Pandas / NumPy** (data wrangling)
-- **Matplotlib / Seaborn** (visualization)
+- **Matplotlib / Seaborn / Plotly** (visualization)
 - **Requests** (data fetching)
 - **Data Source 資料來源**：Taiwan MOPS (公開資訊觀測站) financial statements
 
@@ -127,6 +128,7 @@ streamlit
 requests
 lxml
 html5lib
+plotly  # 用於互動式視覺化
 ```
 
 ---
