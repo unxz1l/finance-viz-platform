@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 *.so
+*.egg-info/
+finance_analyzer.egg-info/
 
 # VS Code
 .vscode/

@@ -6,10 +6,11 @@ This module handles the retrieval and caching of financial data.
 from pathlib import Path
 import time
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import pandas as pd
 import requests
 from io import StringIO
+import streamlit as st
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -236,6 +237,114 @@ _fetcher = TWStockDataFetcher()
 def fetch_statement(*args, **kwargs):
     """Public wrapper for TWStockDataFetcher.fetch_statement."""
     return _fetcher.fetch_statement(*args, **kwargs)
+
+
+class DataLoader:
+    """Handles data loading and caching for financial data."""
+    
+    # Sample companies - replace with actual data source
+    COMPANIES = [
+        "2330 台積電",
+        "2317 鴻海",
+        "2454 聯發科",
+        "2303 聯電",
+        "2881 富邦金",
+    ]
+    
+    @staticmethod
+    def get_available_companies() -> List[str]:
+        """Return list of available companies."""
+        return DataLoader.COMPANIES
+    
+    @staticmethod
+    @st.cache_data
+    def load_company_data(company: str) -> Optional[pd.DataFrame]:
+        """
+        Load financial data for a given company.
+        
+        Parameters
+        ----------
+        company : str
+            Company name and code (e.g., "2330 台積電")
+            
+        Returns
+        -------
+        pd.DataFrame or None
+            Financial data for the company
+        """
+        try:
+            # Extract stock code
+            stock_code = company.split()[0]
+            
+            # Fetch data from TWSE
+            df = DataLoader._fetch_twse_data(stock_code)
+            
+            if df is not None and not df.empty:
+                return df
+            
+            # If TWSE fetch fails, return sample data
+            logger.warning(f"Using sample data for {company}")
+            return pd.DataFrame({
+                'year': [2019, 2020, 2021, 2022, 2023],
+                'ROE': [0.15, 0.18, 0.20, 0.22, 0.25],
+                'Operating_Margin': [0.20, 0.22, 0.25, 0.27, 0.30],
+                'Debt_Ratio': [0.45, 0.42, 0.40, 0.38, 0.35],
+                'Revenue_Growth': [0.05, 0.08, 0.12, 0.15, 0.18]
+            })
+            
+        except Exception as e:
+            logger.error(f"Error loading data for {company}: {str(e)}")
+            return None
+    
+    @staticmethod
+    def _fetch_twse_data(stock_code: str) -> Optional[pd.DataFrame]:
+        """
+        Fetch financial data from TWSE.
+        
+        Parameters
+        ----------
+        stock_code : str
+            Stock code (e.g., "2330")
+            
+        Returns
+        -------
+        pd.DataFrame or None
+            Financial data from TWSE
+        """
+        try:
+            # TWSE API URL
+            url = f"https://mops.twse.com.tw/mops/web/t163sb04"
+            
+            # Prepare request payload
+            payload = {
+                "encodeURIComponent": "1",
+                "step": "1",
+                "firstin": "1",
+                "TYPEK": "sii",
+                "code": stock_code
+            }
+            
+            # Make request
+            response = requests.post(url, data=payload)
+            response.encoding = 'utf-8'
+            
+            if response.status_code == 200:
+                # Parse HTML table
+                dfs = pd.read_html(StringIO(response.text))
+                if dfs:
+                    # Process the first table
+                    df = dfs[0]
+                    
+                    # Clean and transform data
+                    # TODO: Implement proper data cleaning and transformation
+                    
+                    return df
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error fetching TWSE data: {str(e)}")
+            return None
 
 
 if __name__ == "__main__":

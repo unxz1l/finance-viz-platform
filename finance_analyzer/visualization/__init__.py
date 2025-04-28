@@ -1,0 +1,3 @@
+"""
+Financial data visualization package.
+""" 
