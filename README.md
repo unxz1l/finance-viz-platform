@@ -36,8 +36,7 @@ finance-viz-platform/
 │   ├── __init__.py
 │   ├── analysis/              # Financial analysis
 │   │   ├── __init__.py
-│   │   ├── analyzer.py        # Core financial metrics analysis
-│   │   └── insights.py        # Financial insights generation
+│   │   └── indicators.py      # Financial indicators calculation
 │   ├── data/                  # Data processing
 │   │   ├── __init__.py
 │   │   ├── loader.py          # TWSE data loading and caching

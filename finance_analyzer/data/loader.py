@@ -11,6 +11,8 @@ import pandas as pd
 import requests
 from io import StringIO
 import streamlit as st
+import json
+from datetime import datetime
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -25,10 +27,11 @@ class Config:
     # Data storage paths
     RAW_DIR = Path("data/raw")
     
-    # URL templates for different statement types
-    URLS = {
-        "is": "https://mops.twse.com.tw/nas/t21/{TYPEK}/t163sb04_{rocYear}_{season}_0.csv",   # Income Statement
-        "bs": "https://mops.twse.com.tw/nas/t21/{TYPEK}/t163sb05_{rocYear}_{season}_0.csv",   # Balance Sheet
+    # API endpoints
+    API_BASE_URL = "https://openapi.twse.com.tw/v1"
+    API_ENDPOINTS = {
+        "is": "/opendata/t187ap06_X_ci",  # Income Statement
+        "bs": "/opendata/t187ap07_X_ci",  # Balance Sheet
     }
     
     # HTTP request headers
@@ -36,9 +39,9 @@ class Config:
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0 Safari/537.36"
+            "Chrome/124.0.0.0 Safari/537.36"
         ),
-        "Accept-Language": "zh-TW,zh;q=0.9",
+        "Accept": "application/json",
     }
     
     # Create data directories if they don't exist
@@ -54,59 +57,17 @@ class TWStockDataFetcher:
     def __init__(self):
         """Initialize the fetcher with a persistent session."""
         self.session = requests.Session()
-        self.session.headers.update(Config.HEADERS | {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Connection": "keep-alive",
-        })
-    
-    @staticmethod
-    def _roc_year(year: int) -> int:
-        """Convert Gregorian year to ROC year."""
-        return year - 1911
-    
-    def _build_payload(self, year: int, season: int, market: str = "sii") -> Dict[str, str]:
-        """
-        Build request payload for TWSE API.
-        
-        Parameters
-        ----------
-        year : int
-            Gregorian year, e.g. 2023
-        season : int
-            Quarter (1-4)
-        market : str
-            Market type ('sii' or 'otc')
-            
-        Returns
-        -------
-        Dict[str, str]
-            Request payload
-        """
-        return {
-            "encodeURIComponent": "1", 
-            "step": "1", 
-            "firstin": "1", 
-            "off": "1",
-            "TYPEK": market,
-            "year": str(self._roc_year(year)),
-            "season": f"{season:02d}",
-        }
+        self.session.headers.update(Config.HEADERS)
     
     def fetch_statement(self, 
-                        year: int, 
-                        season: int, 
                         table_type: str, 
                         retry: int = DEFAULT_RETRY_COUNT, 
                         sleep_time: float = DEFAULT_SLEEP_TIME) -> Optional[pd.DataFrame]:
         """
-        Download a quarterly statement table (income-statement or balance-sheet).
+        Download financial statement table (income-statement or balance-sheet).
 
         Parameters
         ----------
-        year : int
-            Gregorian year, e.g. 2023
-        season : int
-            Quarter (1-4)
         table_type : str
             "is" for income-statement, "bs" for balance-sheet
         retry : int
@@ -127,104 +88,70 @@ class TWStockDataFetcher:
             If all fetch attempts fail
         """
         # Validate input
-        if table_type not in Config.URLS:
-            raise ValueError(f"table_type must be one of {list(Config.URLS.keys())}")
+        if table_type not in Config.API_ENDPOINTS:
+            raise ValueError(f"table_type must be one of {list(Config.API_ENDPOINTS.keys())}")
         
-        # Check if cached file exists
-        csv_path = Config.RAW_DIR / f"{table_type}_{year}_{season}.csv"
+        # Get current date for cache file
+        current_date = datetime.now().strftime("%Y%m%d")
+        csv_path = Config.RAW_DIR / f"{table_type}_{current_date}.csv"
+        
+        # Check if cached file exists and is from today
         if csv_path.exists():
             logger.info(f"Loading cached data: {csv_path}")
             return pd.read_csv(csv_path, index_col=0)
         
-        # Set referer based on table type
-        referer_page = f"https://mops.twse.com.tw/mops/web/t163sb{'04' if table_type == 'is' else '05'}"
-        ajax_url = Config.URLS[table_type]
+        # Build API URL
+        api_url = f"{Config.API_BASE_URL}{Config.API_ENDPOINTS[table_type]}"
         
         # Attempt to fetch data with retries
         for attempt in range(retry):
-            # Warm-up: fetch the normal HTML page once to obtain cookies
-            if attempt == 0:
-                try:
-                    self.session.get(referer_page, timeout=15)
-                except requests.RequestException as e:
-                    logger.warning(f"Warm-up request failed: {e}")
-            
-            # Prepare headers for the actual request
-            headers = {
-                **self.session.headers,
-                "Referer": referer_page,
-                "Origin": "https://mops.twse.com.tw",
-                "X-Requested-With": "XMLHttpRequest",
-            }
-            
             try:
-                logger.info(f"Fetching {table_type} for {year}Q{season}, attempt {attempt+1}/{retry}")
-                payload = self._build_payload(year, season)
-                resp = self.session.post(ajax_url, payload, headers=headers, timeout=30)
+                logger.info(f"Fetching {table_type} data, attempt {attempt+1}/{retry}")
+                resp = self.session.get(api_url, timeout=30)
+                logger.info(f"Response status: {resp.status_code}")
+                
+                if resp.status_code != 200:
+                    logger.warning(f"API request failed with status {resp.status_code}")
+                    time.sleep(sleep_time * (attempt + 1))
+                    continue
+                
+                # Parse JSON response
+                data = resp.json()
+                
+                if not data:
+                    logger.warning("API returned empty data")
+                    time.sleep(sleep_time * (attempt + 1))
+                    continue
+                
+                # Convert to DataFrame
+                df = pd.DataFrame(data)
+                
+                # Set company code as index
+                if '公司代號' in df.columns:
+                    df = df.set_index('公司代號')
+                
+                # Cache the result
+                df.to_csv(csv_path)
+                logger.info(f"Successfully fetched and saved {table_type} data")
+                return df
+                
             except requests.RequestException as e:
                 logger.warning(f"Request failed: {e}")
                 time.sleep(sleep_time * (attempt + 1))
                 continue
-            
-            # Set encoding and check response
-            resp.encoding = "utf8"
-            text = resp.text
-            
-            if "THE PAGE CANNOT BE ACCESSED" in text:
-                logger.warning("Access blocked, backing off...")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response: {e}")
                 time.sleep(sleep_time * (attempt + 1))
                 continue
-            
-            # Try parsing with different parsers
-            for parser in ("lxml", "html5lib"):
-                try:
-                    dfs = pd.read_html(StringIO(text), header=None, flavor=parser)
-                    if len(dfs) >= 2:
-                        df = (
-                            pd.concat(dfs[1:], ignore_index=True)
-                            .iloc[:, :-1]
-                            .set_index(dfs[1].columns[0])
-                            .apply(pd.to_numeric, errors="coerce")
-                        )
-                        # Cache the result
-                        df.to_csv(csv_path)
-                        logger.info(f"Successfully fetched and saved {table_type} for {year}Q{season}")
-                        return df
-                except ValueError:
-                    logger.debug(f"Parser {parser} failed to find tables")
-                    continue
-            
-            # If we reach here, either table not yet published or blocked; wait & retry
-            logger.warning(f"Failed to parse data, waiting before retry...")
-            time.sleep(sleep_time * (attempt + 1))
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
+                time.sleep(sleep_time * (attempt + 1))
+                continue
         
         # If all attempts fail
-        error_msg = f"Failed to fetch financial data: {table_type} {year}Q{season}"
+        error_msg = f"Failed to fetch financial data: {table_type}"
         logger.error(error_msg)
         raise RuntimeError(error_msg)
-
-
-def load_financial_data(company_id: str, start_year: int = 2018, end_year: int = 2023) -> pd.DataFrame:
-    """
-    Load and combine financial data for a specific company.
-    
-    Parameters
-    ----------
-    company_id : str
-        Company stock code
-    start_year : int
-        Start year for data collection
-    end_year : int
-        End year for data collection
-        
-    Returns
-    -------
-    pd.DataFrame
-        Combined financial data
-    """
-    # Implementation would go here
-    # This is a placeholder for the interface that would be used in app.py
-    pass
 
 
 # Initialize the module when imported
@@ -244,11 +171,16 @@ class DataLoader:
     
     # Sample companies - replace with actual data source
     COMPANIES = [
-        "2330 台積電",
-        "2317 鴻海",
-        "2454 聯發科",
-        "2303 聯電",
-        "2881 富邦金",
+        "2727 王品餐飲",
+        "2729 瓦城泰統",
+        "2753 八方雲集",
+        "1260 乾杯",
+        "1259 安心食品服務",
+        "1268 漢來美食",
+        "7708 全家國際餐飲",
+        "1277 三商餐飲",
+        "2752 豆府",
+        "4419 皇家可口"
     ]
     
     @staticmethod
@@ -277,10 +209,17 @@ class DataLoader:
             stock_code = company.split()[0]
             
             # Fetch data from TWSE
-            df = DataLoader._fetch_twse_data(stock_code)
+            is_df = fetch_statement("is")
+            bs_df = fetch_statement("bs")
             
-            if df is not None and not df.empty:
-                return df
+            if is_df is not None and bs_df is not None:
+                # Combine income statement and balance sheet data
+                if stock_code in is_df.index and stock_code in bs_df.index:
+                    combined_df = pd.concat([
+                        is_df.loc[[stock_code]],
+                        bs_df.loc[[stock_code]]
+                    ], axis=1)
+                    return combined_df
             
             # If TWSE fetch fails, return sample data
             logger.warning(f"Using sample data for {company}")
@@ -295,56 +234,6 @@ class DataLoader:
         except Exception as e:
             logger.error(f"Error loading data for {company}: {str(e)}")
             return None
-    
-    @staticmethod
-    def _fetch_twse_data(stock_code: str) -> Optional[pd.DataFrame]:
-        """
-        Fetch financial data from TWSE.
-        
-        Parameters
-        ----------
-        stock_code : str
-            Stock code (e.g., "2330")
-            
-        Returns
-        -------
-        pd.DataFrame or None
-            Financial data from TWSE
-        """
-        try:
-            # TWSE API URL
-            url = f"https://mops.twse.com.tw/mops/web/t163sb04"
-            
-            # Prepare request payload
-            payload = {
-                "encodeURIComponent": "1",
-                "step": "1",
-                "firstin": "1",
-                "TYPEK": "sii",
-                "code": stock_code
-            }
-            
-            # Make request
-            response = requests.post(url, data=payload)
-            response.encoding = 'utf-8'
-            
-            if response.status_code == 200:
-                # Parse HTML table
-                dfs = pd.read_html(StringIO(response.text))
-                if dfs:
-                    # Process the first table
-                    df = dfs[0]
-                    
-                    # Clean and transform data
-                    # TODO: Implement proper data cleaning and transformation
-                    
-                    return df
-            
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error fetching TWSE data: {str(e)}")
-            return None
 
 
 if __name__ == "__main__":
@@ -354,7 +243,7 @@ if __name__ == "__main__":
     
     # Example usage
     try:
-        df = fetch_statement(2023, 3, "is")
+        df = fetch_statement("is")
         print("=== Sample Data ===")
         print(df.head())
     except Exception as e:

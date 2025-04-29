@@ -37,7 +37,6 @@ class FinancialIndicators:
         net_income = income_statement["本期淨利（損）"]  # Net Income
         
         # Use the average of current and previous period's equity
-        # This is a simplified version using rolling mean
         roe = net_income / (equity.rolling(2).mean()) * 100
         
         return roe.round(2)
@@ -110,26 +109,26 @@ class FinancialIndicators:
         profit_margin = (net_income / revenue) * 100
         
         return profit_margin.round(2)
-
-
-def yoy_growth(current: pd.Series, previous: pd.Series) -> pd.Series:
-    """
-    Calculate year-over-year growth rate.
     
-    Parameters
-    ----------
-    current : pd.Series
-        Current period values
-    previous : pd.Series
-        Previous period values (same period last year)
+    @staticmethod
+    def calculate_revenue_growth(income_statement: pd.DataFrame) -> pd.Series:
+        """
+        Calculate Revenue Growth Rate.
         
-    Returns
-    -------
-    pd.Series
-        YoY growth as percentages, rounded to 2 decimal places
-    """
-    growth = ((current - previous) / previous.abs()) * 100
-    return growth.round(2)
+        Parameters
+        ----------
+        income_statement : pd.DataFrame
+            Income statement data with 'Revenue' column
+            
+        Returns
+        -------
+        pd.Series
+            Revenue growth values as percentages, rounded to 2 decimal places
+        """
+        revenue = income_statement["營業收入"]  # Revenue
+        growth = revenue.pct_change() * 100
+        
+        return growth.round(2)
 
 
 def calculate_financial_ratios(balance_sheet: pd.DataFrame, 
@@ -155,7 +154,8 @@ def calculate_financial_ratios(balance_sheet: pd.DataFrame,
         "ROE": indicators.calculate_roe(balance_sheet, income_statement),
         "ROA": indicators.calculate_roa(balance_sheet, income_statement),
         "Debt Ratio": indicators.calculate_debt_ratio(balance_sheet),
-        "Profit Margin": indicators.calculate_profit_margin(income_statement)
+        "Profit Margin": indicators.calculate_profit_margin(income_statement),
+        "Revenue Growth": indicators.calculate_revenue_growth(income_statement)
     }
     
     return ratios
@@ -183,11 +183,3 @@ if __name__ == "__main__":
     
     print("=== Sample ROE ===")
     print(roe)
-    
-    # Test YoY growth
-    s1 = pd.Series([100, 120])
-    s2 = pd.Series([80, 100])
-    growth = yoy_growth(s1, s2)
-    
-    print("=== YoY Growth ===")
-    print(growth)

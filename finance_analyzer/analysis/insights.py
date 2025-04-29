@@ -1,65 +1,158 @@
 """
-Financial insights generation module for MVP.
-This module provides basic insights generation for core financial metrics.
+Financial insights generation module.
+
+This module provides functions to generate meaningful insights and analysis
+from financial indicators and metrics.
 """
 
-from typing import List, Dict
+from typing import Dict, List, Tuple
 import pandas as pd
+import numpy as np
 
 
-class InsightGenerator:
-    """Class for generating basic financial insights."""
+class FinancialInsights:
+    """Class for generating financial insights and analysis."""
     
     @staticmethod
-    def generate_metric_insight(df: pd.DataFrame, metric: str) -> str:
+    def analyze_trend(series: pd.Series, metric_name: str) -> str:
         """
-        Generate simple insight for a specific metric.
+        Analyze the trend of a financial metric.
         
         Parameters
         ----------
-        df : pd.DataFrame
-            DataFrame containing financial data
-        metric : str
-            Metric name to analyze
+        series : pd.Series
+            Time series data of the metric
+        metric_name : str
+            Name of the metric being analyzed
             
         Returns
         -------
         str
-            Simple insight about the metric trend
+            Insight about the metric's trend
         """
-        if metric not in df.columns:
-            return f"無法分析 {metric}，資料不存在"
+        if series.empty:
+            return f"無法分析 {metric_name}，資料不存在"
             
-        current_value = df[metric].iloc[-1]
-        previous_value = df[metric].iloc[0]
+        current_value = series.iloc[-1]
+        previous_value = series.iloc[0]
         change = current_value - previous_value
         
         if change > 0:
-            return f"{metric} 呈現上升趨勢，從{previous_value:.1%}提升至{current_value:.1%}"
+            return f"{metric_name} 呈現上升趨勢，從{previous_value:.1f}%提升至{current_value:.1f}%"
         elif change < 0:
-            return f"{metric} 呈現下降趨勢，從{previous_value:.1%}降至{current_value:.1%}"
+            return f"{metric_name} 呈現下降趨勢，從{previous_value:.1f}%降至{current_value:.1f}%"
         else:
-            return f"{metric} 維持穩定，約在{current_value:.1%}左右"
+            return f"{metric_name} 維持穩定，約在{current_value:.1f}%左右"
     
     @staticmethod
-    def generate_core_insights(df: pd.DataFrame) -> Dict[str, str]:
+    def analyze_volatility(series: pd.Series, metric_name: str) -> str:
         """
-        Generate insights for core financial metrics.
+        Analyze the volatility of a financial metric.
         
         Parameters
         ----------
-        df : pd.DataFrame
-            DataFrame containing financial data
+        series : pd.Series
+            Time series data of the metric
+        metric_name : str
+            Name of the metric being analyzed
             
         Returns
         -------
-        Dict[str, str]
-            Dictionary of insights for each core metric
+        str
+            Insight about the metric's volatility
         """
-        core_metrics = ['ROE', 'revenue_growth', 'operating_margin']
+        if series.empty:
+            return f"無法分析 {metric_name} 的波動性，資料不存在"
+            
+        std_dev = series.std()
+        mean = series.mean()
+        cv = (std_dev / mean) * 100 if mean != 0 else float('inf')
+        
+        if cv < 10:
+            return f"{metric_name} 波動性低，變異係數為{cv:.1f}%"
+        elif cv < 30:
+            return f"{metric_name} 波動性中等，變異係數為{cv:.1f}%"
+        else:
+            return f"{metric_name} 波動性高，變異係數為{cv:.1f}%"
+    
+    @staticmethod
+    def analyze_relative_performance(series: pd.Series, 
+                                   benchmark: float,
+                                   metric_name: str) -> str:
+        """
+        Analyze the performance relative to a benchmark.
+        
+        Parameters
+        ----------
+        series : pd.Series
+            Time series data of the metric
+        benchmark : float
+            Benchmark value to compare against
+        metric_name : str
+            Name of the metric being analyzed
+            
+        Returns
+        -------
+        str
+            Insight about the metric's relative performance
+        """
+        if series.empty:
+            return f"無法分析 {metric_name} 的相對表現，資料不存在"
+            
+        current_value = series.iloc[-1]
+        difference = current_value - benchmark
+        
+        if difference > 0:
+            return f"{metric_name} 表現優於基準，高出{abs(difference):.1f}%"
+        elif difference < 0:
+            return f"{metric_name} 表現低於基準，低出{abs(difference):.1f}%"
+        else:
+            return f"{metric_name} 表現與基準持平"
+    
+    @staticmethod
+    def generate_comprehensive_insights(ratios: Dict[str, pd.Series]) -> Dict[str, List[str]]:
+        """
+        Generate comprehensive insights for all financial ratios.
+        
+        Parameters
+        ----------
+        ratios : Dict[str, pd.Series]
+            Dictionary of financial ratios and their time series data
+            
+        Returns
+        -------
+        Dict[str, List[str]]
+            Dictionary of insights for each ratio
+        """
         insights = {}
         
-        for metric in core_metrics:
-            insights[metric] = InsightGenerator.generate_metric_insight(df, metric)
+        # Define industry benchmarks (these should be customized based on actual data)
+        benchmarks = {
+            "ROE": 15.0,  # 15% is often considered a good ROE
+            "ROA": 5.0,   # 5% is often considered a good ROA
+            "Debt Ratio": 50.0,  # 50% is often considered a balanced debt ratio
+            "Profit Margin": 10.0,  # 10% is often considered a good profit margin
+            "Revenue Growth": 5.0   # 5% is often considered healthy growth
+        }
+        
+        for metric, series in ratios.items():
+            metric_insights = []
             
+            # Analyze trend
+            trend_insight = FinancialInsights.analyze_trend(series, metric)
+            metric_insights.append(trend_insight)
+            
+            # Analyze volatility
+            volatility_insight = FinancialInsights.analyze_volatility(series, metric)
+            metric_insights.append(volatility_insight)
+            
+            # Analyze relative performance if benchmark exists
+            if metric in benchmarks:
+                relative_insight = FinancialInsights.analyze_relative_performance(
+                    series, benchmarks[metric], metric
+                )
+                metric_insights.append(relative_insight)
+            
+            insights[metric] = metric_insights
+        
         return insights
