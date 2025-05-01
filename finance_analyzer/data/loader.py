@@ -13,6 +13,8 @@ from io import StringIO
 import streamlit as st
 import json
 from datetime import datetime
+import os
+from appdirs import user_cache_dir
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -21,15 +23,19 @@ logger = logging.getLogger(__name__)
 DEFAULT_RETRY_COUNT = 3
 DEFAULT_SLEEP_TIME = 2.0
 
+# 設定快取目錄
+CACHE_DIR = user_cache_dir('finance-viz-platform', 'nthu')
+os.makedirs(CACHE_DIR, exist_ok=True)
+
 class Config:
     """Configuration settings for the data loader."""
     
     # Data storage paths
-    RAW_DIR = Path("data/raw")
+    RAW_DIR = Path(CACHE_DIR) / "raw"
     
     # API endpoints
-    TWSE_API_BASE_URL = "https://openapi.twse.com.tw/v1"
-    TPEX_API_BASE_URL = "https://www.tpex.org.tw/openapi/v1"
+    TWSE_BASE_URL = "https://openapi.twse.com.tw/v1"
+    TPEX_BASE_URL = "https://www.tpex.org.tw/openapi/v1"
     
     API_ENDPOINTS = {
         "twse": {
@@ -42,17 +48,33 @@ class Config:
         }
     }
     
+    # Column mappings for different markets
+    COLUMN_MAPPINGS = {
+        "twse": {
+            "Code": "Code",
+            "Name": "Name",
+            "PEratio": "PEratio",
+            "DividendYield": "DividendYield",
+            "PBratio": "PBratio"
+        },
+        "tpex": {
+            "SecuritiesCompanyCode": "Code",
+            "CompanyName": "Name",
+            "PriceEarningRatio": "PEratio",
+            "DividendPerShare": "DividendYield",
+            "PriceBookRatio": "PBratio"
+        }
+    }
+    
     # HTTP request headers
-    HEADERS = {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/124.0.0.0 Safari/537.36"
-        ),
-        "Accept": "application/json",
-        "If-Modified-Since": "Mon, 26 Jul 1997 05:00:00 GMT",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache"
+    TWSE_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
+    
+    TPEX_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "application/json"
     }
     
     # Create data directories if they don't exist
@@ -68,7 +90,7 @@ class TWStockDataFetcher:
     def __init__(self):
         """Initialize the fetcher with a persistent session."""
         self.session = requests.Session()
-        self.session.headers.update(Config.HEADERS)
+        self.session.headers.update(Config.TWSE_HEADERS)
     
     def fetch_statement(self, 
                         table_type: str,
@@ -93,13 +115,6 @@ class TWStockDataFetcher:
         -------
         pd.DataFrame or None
             Parsed financial statement dataframe or None if failed
-            
-        Raises
-        ------
-        ValueError
-            If table_type or market is invalid
-        RuntimeError
-            If all fetch attempts fail
         """
         # Validate input
         if market not in Config.API_ENDPOINTS:
@@ -113,99 +128,54 @@ class TWStockDataFetcher:
         
         # Check if cached file exists and is from today
         if csv_path.exists():
-            logger.info(f"Loading cached data: {csv_path}")
             try:
                 df = pd.read_csv(csv_path)
                 if not df.empty:
-                    # Process data based on market
-                    if market == "twse":
-                        df = df.set_index("Code")
-                    else:  # tpex
-                        df = df.set_index("SecuritiesCompanyCode")
-                        # Rename columns to match TWSE format
-                        column_mapping = {
-                            "SecuritiesCompanyCode": "Code",
-                            "CompanyName": "Name",
-                            "PriceEarningRatio": "PEratio",
-                            "DividendPerShare": "DividendYield",
-                            "YieldRatio": "YieldRatio",
-                            "PriceBookRatio": "PBratio"
-                        }
-                        df = df.rename(columns=column_mapping)
-                        # Convert index to string to ensure consistent format
-                        df.index = df.index.astype(str)
+                    column_mapping = Config.COLUMN_MAPPINGS[market]
+                    df = df.rename(columns=column_mapping)
+                    df = df.set_index("Code")
+                    df.index = df.index.astype(str)
                     return df
-            except Exception as e:
-                logger.warning(f"Failed to load cached data: {e}")
+            except Exception:
+                pass
         
         # Build API URL
-        base_url = Config.TWSE_API_BASE_URL if market == "twse" else Config.TPEX_API_BASE_URL
+        base_url = Config.TWSE_BASE_URL if market == "twse" else Config.TPEX_BASE_URL
         api_url = f"{base_url}{Config.API_ENDPOINTS[market][table_type]}"
+        
+        # Set appropriate headers
+        headers = Config.TWSE_HEADERS if market == "twse" else Config.TPEX_HEADERS
+        self.session.headers.update(headers)
         
         # Attempt to fetch data with retries
         for attempt in range(retry):
             try:
-                logger.info(f"Fetching {market} {table_type} data, attempt {attempt+1}/{retry}")
                 resp = self.session.get(api_url, timeout=30)
-                logger.info(f"Response status: {resp.status_code}")
-                
                 if resp.status_code != 200:
-                    logger.warning(f"API request failed with status {resp.status_code}")
                     time.sleep(sleep_time * (attempt + 1))
                     continue
                 
-                # Parse JSON response
                 data = resp.json()
-                
                 if not data:
-                    logger.warning("API returned empty data")
                     time.sleep(sleep_time * (attempt + 1))
                     continue
                 
-                # Process data based on market
-                if market == "twse":
-                    df = pd.DataFrame(data)
-                    # Convert Code to string to ensure consistent format
-                    df['Code'] = df['Code'].astype(str)
-                    df = df.set_index("Code")
-                else:  # tpex
-                    df = pd.DataFrame(data)
-                    # Convert SecuritiesCompanyCode to string
-                    df['SecuritiesCompanyCode'] = df['SecuritiesCompanyCode'].astype(str)
-                    df = df.set_index("SecuritiesCompanyCode")
-                    # Rename columns to match TWSE format
-                    column_mapping = {
-                        "SecuritiesCompanyCode": "Code",
-                        "CompanyName": "Name",
-                        "PriceEarningRatio": "PEratio",
-                        "DividendPerShare": "DividendYield",
-                        "YieldRatio": "YieldRatio",
-                        "PriceBookRatio": "PBratio"
-                    }
-                    df = df.rename(columns=column_mapping)
+                # Create DataFrame and rename columns
+                df = pd.DataFrame(data)
+                column_mapping = Config.COLUMN_MAPPINGS[market]
+                df = df.rename(columns=column_mapping)
+                df = df.set_index("Code")
+                df.index = df.index.astype(str)
                 
                 # Cache the result
                 df.to_csv(csv_path)
-                logger.info(f"Successfully fetched and saved {market} {table_type} data")
                 return df
                 
-            except requests.RequestException as e:
-                logger.warning(f"Request failed: {e}")
-                time.sleep(sleep_time * (attempt + 1))
-                continue
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON response: {e}")
-                time.sleep(sleep_time * (attempt + 1))
-                continue
-            except Exception as e:
-                logger.error(f"Unexpected error: {e}")
+            except Exception:
                 time.sleep(sleep_time * (attempt + 1))
                 continue
         
-        # If all attempts fail
-        error_msg = f"Failed to fetch financial data: {market} {table_type}"
-        logger.error(error_msg)
-        raise RuntimeError(error_msg)
+        return None
 
 
 # Initialize the module when imported

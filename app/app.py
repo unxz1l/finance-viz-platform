@@ -1,80 +1,78 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from finance_analyzer.data.loader import DataLoader
+from finance_analyzer.visualization.plotter import FinancialPlotter
 
 # Page configuration
 st.set_page_config(
-    page_title="財務數據分析",
+    page_title="財務指標分析",
     page_icon="📊",
     layout="wide"
 )
 
 # Title
-st.title("📊 財務數據分析平台")
+st.title("📊 財務指標分析平台")
 
 # Sidebar for company selection
 with st.sidebar:
     st.header("公司選擇")
-    company = st.selectbox(
-        "選擇公司",
+    companies = st.multiselect(
+        "選擇公司（可複選）",
         options=DataLoader.get_available_companies(),
-        index=0
+        default=None
     )
 
 # Main content
-if company:
-    # Load company data
-    df = DataLoader.load_company_data(company)
+if companies:
+    # Create tabs for different views
+    tab1, tab2 = st.tabs(["趨勢分析", "年度比較"])
     
-    if df is not None and not df.empty:
-        # Display basic metrics
-        st.header(f"{company} 財務指標")
-        
-        # Create columns for metrics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("ROE", f"{df['ROE'].iloc[-1]:.1%}")
-        with col2:
-            st.metric("營業淨利率", f"{df['Operating_Margin'].iloc[-1]:.1%}")
-        with col3:
-            st.metric("負債比率", f"{df['Debt_Ratio'].iloc[-1]:.1%}")
-        
-        # Plot trends
-        st.header("趨勢分析")
+    with tab1:
+        st.header("財務指標趨勢")
         
         # Metric selection
         metric = st.selectbox(
             "選擇指標",
-            options=['ROE', 'Operating_Margin', 'Debt_Ratio', 'Revenue_Growth'],
+            options=['ROE', 'Revenue Growth', 'Operating Margin Growth'],
             index=0
         )
         
-        # Create and display plot
-        fig = px.line(
-            df,
-            x='year',
-            y=metric,
-            title=f"{metric} 趨勢",
-            markers=True
-        )
-        fig.update_layout(
-            xaxis_title="年度",
-            yaxis_title=metric,
-            hovermode="x unified"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        # Create and display plots for each selected company
+        for company in companies:
+            df = DataLoader.load_company_data(company)
+            if df is not None and not df.empty:
+                fig = FinancialPlotter.create_metric_line_chart(df, metric)
+                st.plotly_chart(fig, use_container_width=True)
+    
+    with tab2:
+        st.header("年度比較")
         
-        # Display data table
-        st.header("詳細數據")
-        st.dataframe(df.style.format({
-            'ROE': '{:.1%}',
-            'Operating_Margin': '{:.1%}',
-            'Debt_Ratio': '{:.1%}',
-            'Revenue_Growth': '{:.1%}'
-        }))
-    else:
-        st.error("無法載入公司數據")
+        # Year selection
+        year = st.selectbox(
+            "選擇年度",
+            options=[str(y) for y in range(103, 114)],  # 103-113年
+            index=0
+        )
+        
+        # Create comparison tables for each selected company
+        for company in companies:
+            df = DataLoader.load_company_data(company)
+            if df is not None and not df.empty:
+                st.subheader(company)
+                comparison = FinancialPlotter.create_comparison_table(df, year)
+                if not comparison.empty:
+                    st.table(comparison)
+                    
+                    # Simple risk assessment
+                    st.write("投資風險評估：")
+                    if df['ROE'].iloc[-1] > 15:
+                        st.success("ROE表現良好")
+                    else:
+                        st.warning("ROE表現需注意")
+                        
+                    if df['Revenue Growth'].iloc[-1] > 10:
+                        st.success("營收成長強勁")
+                    else:
+                        st.warning("營收成長趨緩")
 else:
     st.info("請從側邊欄選擇公司")
