@@ -71,32 +71,46 @@ Currently supporting 9 restaurant companies:
 ```
 finance-viz-platform/
 ├── README.md                  # Documentation
-├── requirements.txt           # Dependencies
+├── requirements.txt           # Core dependencies
+├── requirements-dev.txt       # Development dependencies
 ├── .gitignore                # Git ignore file
 ├── finance_analyzer/         # Core analysis module
 │   ├── __init__.py
 │   ├── analysis/            # Financial analysis
-│   │   ├── __init__.py
-│   │   └── indicators.py    # Financial indicators calculation
+│   │   ├── indicators.py    # Financial indicators calculation
+│   │   └── insights.py      # Financial insights generation
 │   ├── data/               # Data processing
 │   │   ├── __init__.py
-│   │   └── loader.py       # Data loading and caching
+│   │   ├── loader.py       # Data loading and caching
+│   │   └── processor.py    # Data processing utilities
 │   └── visualization/      # Visualization
 │       ├── __init__.py
-│       └── plotter.py      # Chart generation
-└── app/                    # Application interface
-    ├── __init__.py
-    └── app.py             # Main application
+│       ├── plotter.py      # Chart generation
+│       └── dashboard.py    # Dashboard components
+├── app/                    # Application interface
+│   ├── __init__.py
+│   └── app.py             # Main application
+└── test/                  # Test suite
+    ├── test_data_loader.py    # Data loader tests
+    ├── test_visualization.py  # Visualization tests
+    ├── test_indicators.py     # Financial indicators tests
+    └── test_twse_api.py       # API integration tests
 ```
 
 ## Installation
 
 ```bash
-# Install dependencies
+# Install core dependencies
 pip install -r requirements.txt
+
+# Install development dependencies (for testing and development)
+pip install -r requirements-dev.txt
 
 # Run the application
 streamlit run app/app.py
+
+# Run tests
+pytest test/
 ```
 
 ## Usage

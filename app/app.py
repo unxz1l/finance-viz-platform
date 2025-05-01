@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from finance_analyzer.data.loader import DataLoader
 from finance_analyzer.visualization.plotter import FinancialPlotter
+from finance_analyzer.analysis.insights import FinancialInsights
 
 # Page configuration
 st.set_page_config(
@@ -65,14 +66,11 @@ if companies:
                     
                     # Simple risk assessment
                     st.write("投資風險評估：")
-                    if df['ROE'].iloc[-1] > 15:
-                        st.success("ROE表現良好")
-                    else:
-                        st.warning("ROE表現需注意")
-                        
-                    if df['Revenue Growth'].iloc[-1] > 10:
-                        st.success("營收成長強勁")
-                    else:
-                        st.warning("營收成長趨緩")
+                    risk_assessment = FinancialInsights.assess_risk(df)
+                    for metric, assessment in risk_assessment.items():
+                        if "良好" in assessment or "強勁" in assessment:
+                            st.success(assessment)
+                        else:
+                            st.warning(assessment)
 else:
     st.info("請從側邊欄選擇公司")

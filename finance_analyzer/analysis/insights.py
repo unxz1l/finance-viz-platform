@@ -156,3 +156,34 @@ class FinancialInsights:
             insights[metric] = metric_insights
         
         return insights
+
+    @staticmethod
+    def assess_risk(df: pd.DataFrame) -> Dict[str, str]:
+        """
+        Assess investment risk based on key financial metrics.
+        
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame containing financial metrics
+            
+        Returns
+        -------
+        Dict[str, str]
+            Dictionary of risk assessments for each metric
+        """
+        risk_assessment = {}
+        
+        # ROE assessment
+        if df['ROE'].iloc[-1] > 15:
+            risk_assessment['ROE'] = "ROE表現良好"
+        else:
+            risk_assessment['ROE'] = "ROE表現需注意"
+            
+        # Revenue Growth assessment
+        if df['Revenue Growth'].iloc[-1] > 10:
+            risk_assessment['Revenue Growth'] = "營收成長強勁"
+        else:
+            risk_assessment['Revenue Growth'] = "營收成長趨緩"
+            
+        return risk_assessment
