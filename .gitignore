@@ -4,12 +4,18 @@ __pycache__/
 *.so
 *.egg-info/
 finance_analyzer.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
 
 # VS Code
 .vscode/
 
 # Mac 系統垃圾
 .DS_Store
+.AppleDouble
+.LSOverride
 
 # Streamlit
 .streamlit/credentials.toml
@@ -19,18 +25,26 @@ finance_analyzer.egg-info/
 venv/
 env/
 .venv/
+.env/
 
 # Jupyter
 .ipynb_checkpoints/
+*.ipynb
 
 # 資料檔 / 資料庫
 *.db
 *.sqlite
 *.csv
 *.xlsx
+*.json
 
 # 敏感資訊（例如 .env 存密碼）
 .env
+*.key
+*.pem
+secrets.yaml
 
-# 不把原始下載的資料檔納入版控
-data/raw/
+# 日誌文件
+*.log
+logs/
+tmp/
