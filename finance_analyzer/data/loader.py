@@ -28,10 +28,18 @@ class Config:
     RAW_DIR = Path("data/raw")
     
     # API endpoints
-    API_BASE_URL = "https://openapi.twse.com.tw/v1"
+    TWSE_API_BASE_URL = "https://openapi.twse.com.tw/v1"
+    TPEX_API_BASE_URL = "https://www.tpex.org.tw/openapi/v1"
+    
     API_ENDPOINTS = {
-        "is": "/opendata/t187ap06_X_ci",  # Income Statement
-        "bs": "/opendata/t187ap07_X_ci",  # Balance Sheet
+        "twse": {
+            "is": "/exchangeReport/BWIBBU_d",  # Income Statement
+            "bs": "/exchangeReport/BWIBBU_d",  # Balance Sheet
+        },
+        "tpex": {
+            "is": "/tpex_mainboard_peratio_analysis",  # Income Statement
+            "bs": "/tpex_mainboard_peratio_analysis",  # Balance Sheet
+        }
     }
     
     # HTTP request headers
@@ -42,6 +50,9 @@ class Config:
             "Chrome/124.0.0.0 Safari/537.36"
         ),
         "Accept": "application/json",
+        "If-Modified-Since": "Mon, 26 Jul 1997 05:00:00 GMT",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache"
     }
     
     # Create data directories if they don't exist
@@ -52,7 +63,7 @@ class Config:
 
 
 class TWStockDataFetcher:
-    """Class for fetching financial data from Taiwan Stock Exchange."""
+    """Class for fetching financial data from Taiwan Stock Exchange and TPEX."""
     
     def __init__(self):
         """Initialize the fetcher with a persistent session."""
@@ -60,7 +71,8 @@ class TWStockDataFetcher:
         self.session.headers.update(Config.HEADERS)
     
     def fetch_statement(self, 
-                        table_type: str, 
+                        table_type: str,
+                        market: str = "twse",  # "twse" or "tpex"
                         retry: int = DEFAULT_RETRY_COUNT, 
                         sleep_time: float = DEFAULT_SLEEP_TIME) -> Optional[pd.DataFrame]:
         """
@@ -70,6 +82,8 @@ class TWStockDataFetcher:
         ----------
         table_type : str
             "is" for income-statement, "bs" for balance-sheet
+        market : str
+            "twse" for listed companies, "tpex" for OTC companies
         retry : int
             Number of retry attempts
         sleep_time : float
@@ -83,30 +97,55 @@ class TWStockDataFetcher:
         Raises
         ------
         ValueError
-            If table_type is invalid
+            If table_type or market is invalid
         RuntimeError
             If all fetch attempts fail
         """
         # Validate input
-        if table_type not in Config.API_ENDPOINTS:
-            raise ValueError(f"table_type must be one of {list(Config.API_ENDPOINTS.keys())}")
+        if market not in Config.API_ENDPOINTS:
+            raise ValueError(f"market must be one of {list(Config.API_ENDPOINTS.keys())}")
+        if table_type not in Config.API_ENDPOINTS[market]:
+            raise ValueError(f"table_type must be one of {list(Config.API_ENDPOINTS[market].keys())}")
         
         # Get current date for cache file
         current_date = datetime.now().strftime("%Y%m%d")
-        csv_path = Config.RAW_DIR / f"{table_type}_{current_date}.csv"
+        csv_path = Config.RAW_DIR / f"{market}_{table_type}_{current_date}.csv"
         
         # Check if cached file exists and is from today
         if csv_path.exists():
             logger.info(f"Loading cached data: {csv_path}")
-            return pd.read_csv(csv_path, index_col=0)
+            try:
+                df = pd.read_csv(csv_path)
+                if not df.empty:
+                    # Process data based on market
+                    if market == "twse":
+                        df = df.set_index("Code")
+                    else:  # tpex
+                        df = df.set_index("SecuritiesCompanyCode")
+                        # Rename columns to match TWSE format
+                        column_mapping = {
+                            "SecuritiesCompanyCode": "Code",
+                            "CompanyName": "Name",
+                            "PriceEarningRatio": "PEratio",
+                            "DividendPerShare": "DividendYield",
+                            "YieldRatio": "YieldRatio",
+                            "PriceBookRatio": "PBratio"
+                        }
+                        df = df.rename(columns=column_mapping)
+                        # Convert index to string to ensure consistent format
+                        df.index = df.index.astype(str)
+                    return df
+            except Exception as e:
+                logger.warning(f"Failed to load cached data: {e}")
         
         # Build API URL
-        api_url = f"{Config.API_BASE_URL}{Config.API_ENDPOINTS[table_type]}"
+        base_url = Config.TWSE_API_BASE_URL if market == "twse" else Config.TPEX_API_BASE_URL
+        api_url = f"{base_url}{Config.API_ENDPOINTS[market][table_type]}"
         
         # Attempt to fetch data with retries
         for attempt in range(retry):
             try:
-                logger.info(f"Fetching {table_type} data, attempt {attempt+1}/{retry}")
+                logger.info(f"Fetching {market} {table_type} data, attempt {attempt+1}/{retry}")
                 resp = self.session.get(api_url, timeout=30)
                 logger.info(f"Response status: {resp.status_code}")
                 
@@ -123,16 +162,31 @@ class TWStockDataFetcher:
                     time.sleep(sleep_time * (attempt + 1))
                     continue
                 
-                # Convert to DataFrame
-                df = pd.DataFrame(data)
-                
-                # Set company code as index
-                if '公司代號' in df.columns:
-                    df = df.set_index('公司代號')
+                # Process data based on market
+                if market == "twse":
+                    df = pd.DataFrame(data)
+                    # Convert Code to string to ensure consistent format
+                    df['Code'] = df['Code'].astype(str)
+                    df = df.set_index("Code")
+                else:  # tpex
+                    df = pd.DataFrame(data)
+                    # Convert SecuritiesCompanyCode to string
+                    df['SecuritiesCompanyCode'] = df['SecuritiesCompanyCode'].astype(str)
+                    df = df.set_index("SecuritiesCompanyCode")
+                    # Rename columns to match TWSE format
+                    column_mapping = {
+                        "SecuritiesCompanyCode": "Code",
+                        "CompanyName": "Name",
+                        "PriceEarningRatio": "PEratio",
+                        "DividendPerShare": "DividendYield",
+                        "YieldRatio": "YieldRatio",
+                        "PriceBookRatio": "PBratio"
+                    }
+                    df = df.rename(columns=column_mapping)
                 
                 # Cache the result
                 df.to_csv(csv_path)
-                logger.info(f"Successfully fetched and saved {table_type} data")
+                logger.info(f"Successfully fetched and saved {market} {table_type} data")
                 return df
                 
             except requests.RequestException as e:
@@ -149,7 +203,7 @@ class TWStockDataFetcher:
                 continue
         
         # If all attempts fail
-        error_msg = f"Failed to fetch financial data: {table_type}"
+        error_msg = f"Failed to fetch financial data: {market} {table_type}"
         logger.error(error_msg)
         raise RuntimeError(error_msg)
 
@@ -169,24 +223,23 @@ def fetch_statement(*args, **kwargs):
 class DataLoader:
     """Handles data loading and caching for financial data."""
     
-    # Sample companies - replace with actual data source
+    # Sample companies with market information
     COMPANIES = [
-        "2727 王品餐飲",
-        "2729 瓦城泰統",
-        "2753 八方雲集",
-        "1260 乾杯",
-        "1259 安心食品服務",
-        "1268 漢來美食",
-        "7708 全家國際餐飲",
-        "1277 三商餐飲",
-        "2752 豆府",
-        "4419 皇家可口"
+        {"code": "2727", "name": "王品股份有限公司", "market": "twse"},
+        {"code": "2729", "name": "瓦城泰統股份有限公司", "market": "twse"},
+        {"code": "2753", "name": "八方雲集國際股份有限公司", "market": "twse"},
+        {"code": "1259", "name": "安心食品服務股份有限公司", "market": "tpex"},
+        {"code": "1268", "name": "漢來美食股份有限公司", "market": "tpex"},
+        {"code": "7708", "name": "全家國際餐飲股份有限公司", "market": "tpex"},
+        {"code": "7705", "name": "三商餐飲股份有限公司", "market": "twse"},
+        {"code": "2752", "name": "豆府股份有限公司", "market": "tpex"},
+        {"code": "4419", "name": "皇家國際美食股份有限公司", "market": "tpex"}
     ]
     
     @staticmethod
     def get_available_companies() -> List[str]:
         """Return list of available companies."""
-        return DataLoader.COMPANIES
+        return [f"{company['code']} {company['name']}" for company in DataLoader.COMPANIES]
     
     @staticmethod
     @st.cache_data
@@ -208,28 +261,43 @@ class DataLoader:
             # Extract stock code
             stock_code = company.split()[0]
             
-            # Fetch data from TWSE
-            is_df = fetch_statement("is")
-            bs_df = fetch_statement("bs")
+            # Find company info
+            company_info = next((c for c in DataLoader.COMPANIES if c["code"] == stock_code), None)
+            if not company_info:
+                logger.warning(f"Company {company} not found in the list")
+                return None
             
-            if is_df is not None and bs_df is not None:
-                # Combine income statement and balance sheet data
-                if stock_code in is_df.index and stock_code in bs_df.index:
-                    combined_df = pd.concat([
-                        is_df.loc[[stock_code]],
-                        bs_df.loc[[stock_code]]
-                    ], axis=1)
-                    return combined_df
+            # Get market from company info
+            market = company_info["market"]
+            data = None
+            error_msg = None
             
-            # If TWSE fetch fails, return sample data
-            logger.warning(f"Using sample data for {company}")
-            return pd.DataFrame({
-                'year': [2019, 2020, 2021, 2022, 2023],
-                'ROE': [0.15, 0.18, 0.20, 0.22, 0.25],
-                'Operating_Margin': [0.20, 0.22, 0.25, 0.27, 0.30],
-                'Debt_Ratio': [0.45, 0.42, 0.40, 0.38, 0.35],
-                'Revenue_Growth': [0.05, 0.08, 0.12, 0.15, 0.18]
-            })
+            try:
+                is_df = fetch_statement("is", market=market)
+                bs_df = fetch_statement("bs", market=market)
+                
+                if is_df is not None and bs_df is not None:
+                    # Combine income statement and balance sheet data
+                    if stock_code in is_df.index and stock_code in bs_df.index:
+                        data = pd.concat([
+                            is_df.loc[[stock_code]],
+                            bs_df.loc[[stock_code]]
+                        ], axis=1)
+                        # Add timestamp and market info
+                        data['fetch_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        data['market'] = market.upper()
+            except Exception as e:
+                error_msg = f"Failed to fetch data from {market}: {str(e)}"
+                logger.warning(error_msg)
+            
+            if data is not None:
+                return data
+            elif error_msg:
+                logger.error(error_msg)
+                return None
+            else:
+                logger.warning(f"No data found for company {company}")
+                return None
             
         except Exception as e:
             logger.error(f"Error loading data for {company}: {str(e)}")
