@@ -677,6 +677,6 @@ class FinancialAnalysisApp:
 
 
 # 執行應用程序
-if _name_ == "_main_":
+if __name__ == "__main__":
     app = FinancialAnalysisApp()
-    app.run
+    app.run()
