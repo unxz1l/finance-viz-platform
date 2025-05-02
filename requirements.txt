@@ -10,6 +10,8 @@ python-dateutil>=2.9.0
 pytz>=2025.2
 toml>=0.10.2
 matplotlib>=3.8.0
+seaborn>=0.12.0
+
 
 # UI components
 altair>=5.5.0,<6.0.0
