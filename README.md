@@ -11,13 +11,15 @@ Instructor: Prof. Cheng-Chi Chen 陳政琦
 ## Current Status
 
 ### Supported Companies
-Currently supporting 9 restaurant companies:
+Currently supporting 11 restaurant companies:
 
 **TWSE Listed (上市):**
 - 2727 王品股份有限公司
 - 2729 瓦城泰統股份有限公司
 - 2753 八方雲集國際股份有限公司
 - 7705 三商餐飲股份有限公司
+- 2723 美食-KY股份有限公司
+- 2732 六角國際事業股份有限公司
 
 **TPEx Listed (上櫃):**
 - 1259 安心食品服務股份有限公司

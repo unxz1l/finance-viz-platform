@@ -195,17 +195,19 @@ class DataLoader:
     
     # Sample companies with market information
     COMPANIES = [
-        {"code": "2727", "name": "王品股份有限公司", "market": "twse"},
-        {"code": "2729", "name": "瓦城泰統股份有限公司", "market": "twse"},
-        {"code": "2753", "name": "八方雲集國際股份有限公司", "market": "twse"},
-        {"code": "1259", "name": "安心食品服務股份有限公司", "market": "tpex"},
-        {"code": "1268", "name": "漢來美食股份有限公司", "market": "tpex"},
-        {"code": "7708", "name": "全家國際餐飲股份有限公司", "market": "tpex"},
-        {"code": "7705", "name": "三商餐飲股份有限公司", "market": "twse"},
-        {"code": "2752", "name": "豆府股份有限公司", "market": "tpex"},
-        {"code": "4419", "name": "皇家國際美食股份有限公司", "market": "tpex"}
-    ]
-    
+    {"code": "2727", "name": "王品股份有限公司", "market": "twse"},
+    {"code": "2729", "name": "瓦城泰統股份有限公司", "market": "twse"},
+    {"code": "2753", "name": "八方雲集國際股份有限公司", "market": "twse"},
+    {"code": "1259", "name": "安心食品服務股份有限公司", "market": "tpex"},
+    {"code": "1268", "name": "漢來美食股份有限公司", "market": "tpex"},
+    {"code": "7708", "name": "全家國際餐飲股份有限公司", "market": "tpex"},
+    {"code": "7705", "name": "三商餐飲股份有限公司", "market": "twse"},
+    {"code": "2752", "name": "豆府股份有限公司", "market": "tpex"},
+    {"code": "4419", "name": "皇家國際美食股份有限公司", "market": "tpex"},
+    {"code": "2723", "name": "美食-KY股份有限公司", "market": "twse"},
+    {"code": "2732", "name": "六角國際事業股份有限公司", "market": "tpex"}
+]
+
     @staticmethod
     def get_available_companies() -> List[str]:
         """Return list of available companies."""

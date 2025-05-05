@@ -201,6 +201,20 @@ class DataLoader:
                     "founded": "2008年",
                     "stores": "超過30家門市",
                     "description": "以高檔西式料理為主，主打精緻西式餐飲服務。"
+                },
+                "美食-KY股份有限公司": {
+                    "full_name": "美食-KY",
+                    "industry": "連鎖餐飲",
+                    "founded": "2002年",
+                    "stores": "超過1,000家門市",
+                    "description": "以85度C品牌聞名，主打平價咖啡與甜點，在台灣、中國、美國等地均有據點。"
+                },
+                "六角國際事業股份有限公司": {
+                    "full_name": "六角國際",
+                    "industry": "連鎖餐飲",
+                    "founded": "2004年",
+                    "stores": "超過100家門市",
+                    "description": "以Chatime日出茶太品牌聞名，主打手搖飲料，在台灣、中國、東南亞等地均有據點。"
                 }
             }
             

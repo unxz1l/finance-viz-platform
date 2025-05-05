@@ -162,7 +162,9 @@ def test_fetch_restaurant_companies():
         "7708",  # 全家國際餐飲
         "7705",  # 三商餐飲
         "2752",  # 豆府
-        "4419"   # 皇家可口
+        "4419",  # 皇家可口
+        "2723",  # 美食-KY
+        "2732"   # 六角國際
     ]
     
     # Test that all companies are in the DataLoader.COMPANIES list
