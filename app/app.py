@@ -1,12 +1,9 @@
-# -*- coding: utf-8 -*-z
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime
 import plotly.graph_objects as go
-import plotly.express as px
+from finance_analyzer.data.loader import DataLoader as ExternalDataLoader
 
 # 設置頁面配置
 st.set_page_config(
@@ -15,12 +12,55 @@ st.set_page_config(
     layout="wide"
 )
 
+# 添加自定義CSS
+st.markdown("""
+<style>
+    .main {
+        background-color: #FFF5F0;
+    }
+    .stApp {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    h1, h2, h3 {
+        color: #581845;
+    }
+    .stButton>button {
+        background-color: #FF5733;
+        color: white;
+    }
+    .stButton>button:hover {
+        background-color: #C70039;
+    }
+    .highlight {
+        background-color: #FFF5F0;
+        padding: 20px;
+        border-radius: 10px;
+        border-left: 5px solid #FF5733;
+    }
+    .risk {
+        background-color: #FFE5E5;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #C70039;
+        margin-bottom: 10px;
+    }
+    .opportunity {
+        background-color: #E5FFE5;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #4CAF50;
+        margin-bottom: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # 定義財務數據處理類
 class FinancialData:
     def __init__(self):
         # 讀取CSV文件
         try:
-            self.df = pd.read_csv('../output/selected_companies_financials.csv')
+            self.df = pd.read_csv('output/selected_companies_financials.csv')
             # 確保年份列是整數類型
             self.df['年份'] = self.df['年份'].astype(int)
             # 確保公司代碼是字符串類型
@@ -76,18 +116,6 @@ class FinancialData:
                         "成本控制優化"
                     ]
                 },
-                "112": {
-                    "risks": [
-                        "中高價位餐飲受經濟環境影響大",
-                        "人才流失風險",
-                        "租金成本持續上升"
-                    ],
-                    "highlights": [
-                        "品牌重塑策略成功",
-                        "營運效率持續提升",
-                        "多元化收入來源"
-                    ]
-                },
                 "113": {
                     "risks": [
                         "消費者偏好快速變化",
@@ -98,20 +126,6 @@ class FinancialData:
                         "高端市場領導地位鞏固",
                         "數位轉型成效顯著",
                         "ESG策略獲得正面評價"
-                    ]
-                }
-            },
-            "美食達人": {
-                "111": {
-                    "risks": [
-                        "快速擴張帶來的管理風險",
-                        "品質一致性挑戰",
-                        "中低價位市場競爭激烈"
-                    ],
-                    "highlights": [
-                        "供應鏈整合優勢",
-                        "社群行銷口碑良好",
-                        "品牌忠誠度高"
                     ]
                 }
             }
@@ -159,14 +173,13 @@ class FinancialData:
                 selected_years = available_years[-10:] if len(available_years) >= 10 else available_years
             
             company_data = company_data[company_data['年份'].isin(selected_years)]
-            metric_name = self.metric_names[metric]
             
-            if metric_name not in company_data.columns:
-                st.error(f"找不到指標: {metric_name}")
+            if metric not in company_data.columns:
+                st.error(f"找不到指標: {metric}")
                 return {}
             
             # 確保年份是字符串格式，並且只返回存在的年份的數據
-            return {str(year): float(value) for year, value in zip(company_data['年份'], company_data[metric_name])}
+            return {str(year): float(value) for year, value in zip(company_data['年份'], company_data[metric])}
             
         except Exception as e:
             st.error(f"數據處理錯誤: {str(e)}")
@@ -208,9 +221,9 @@ class ChartGenerator:
                 ))
             
             fig.update_layout(
-                title=f"{self.financial_data.get_metric_names()[metric]} 趨勢圖",
+                title=f"{metric} 趨勢圖",
                 xaxis_title="年度",
-                yaxis_title=self.financial_data.get_metric_names()[metric],
+                yaxis_title=metric,
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
@@ -218,7 +231,9 @@ class ChartGenerator:
                     xanchor="right",
                     x=1
                 ),
-                margin=dict(l=40, r=40, t=60, b=40)
+                margin=dict(l=40, r=40, t=60, b=40),
+                template="seaborn",
+                height=500
             )
             
             return fig
@@ -246,13 +261,22 @@ class ChartGenerator:
         data = []
         for metric in self.financial_data.get_metric_names():
             name = self.financial_data.get_metric_names()[metric]
-            current_value = company_data[company_data['年份'] == year][name].values[0]
-            prev_value = company_data[company_data['年份'] == prev_year][name].values[0]
-            data.append({
-                "財務指標": name,
-                f"{year}年": current_value,
-                f"{prev_year}年": prev_value
-            })
+            try:
+                current_value = float(company_data[company_data['年份'] == year][name].values[0])
+                prev_value = float(company_data[company_data['年份'] == prev_year][name].values[0])
+                change = current_value - prev_value
+                change_percent = (change / prev_value * 100) if prev_value != 0 else 0
+                change_direction = "↑" if change > 0 else "↓"
+                
+                data.append({
+                    "財務指標": name,
+                    f"{year}年": f"{current_value:.2f}",
+                    f"{prev_year}年": f"{prev_value:.2f}",
+                    "變化": f"{change_direction} {abs(change):.2f} ({abs(change_percent):.2f}%)"
+                })
+            except (ValueError, TypeError):
+                # 如果無法轉換為數值，則跳過該指標
+                continue
         
         return pd.DataFrame(data), prev_year
 
@@ -263,20 +287,34 @@ class FinancialAnalysisApp:
         self.chart_generator = ChartGenerator(self.financial_data)
 
     def run(self):
-        st.sidebar.title("設定選項")
+        st.markdown("<h1 style='text-align: center; color: #581845;'>餐飲業財務分析儀表板</h1>", unsafe_allow_html=True)
+        
+        st.sidebar.markdown("### 選擇分析參數")
+        
+        # 公司多選
         selected_companies = st.sidebar.multiselect(
-            "選擇公司",
-            self.financial_data.get_company_names()
+            "選擇感興趣的公司",
+            self.financial_data.get_company_names(),
+            default=[self.financial_data.get_company_names()[0]]
         )
+        
+        # 時間範圍選擇
+        years_range = st.sidebar.radio(
+            "選擇時間範圍",
+            [5, 10],
+            format_func=lambda x: f"近{x}年"
+        )
+        
+        # 財務指標選擇
         selected_metric = st.sidebar.selectbox(
             "選擇財務指標",
-            list(self.financial_data.get_metric_names().keys()),
-            format_func=lambda x: self.financial_data.get_metric_names()[x]
-        )
-        years_range = st.sidebar.radio(
-            "選擇年度範圍",
-            (5, 10),
-            index=0
+            [
+                "財務結構-負債佔資產比率(%)",
+                "獲利能力-純益率(%)",
+                "獲利能力-權益報酬率(%)",
+                "獲利能力-每股盈餘(元)",
+                "現金流量-現金流量比率(%)"
+            ]
         )
 
         if not selected_companies:
@@ -285,35 +323,81 @@ class FinancialAnalysisApp:
 
         # 生成並顯示圖表
         fig = self.chart_generator.generate_line_chart(selected_companies, selected_metric, years_range)
-        st.plotly_chart(fig, use_container_width=True)
-
-        # 顯示每個公司的趨勢詳情
-        for company in selected_companies:
-            st.markdown(f"#### {company} ({self.financial_data.get_company_code(company)}) 趨勢詳情")
+        if fig:
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("無法生成圖表，請檢查數據源")
+            return
+        
+        # 分隔線
+        st.markdown("---")
+        
+        # 詳細分析區域
+        st.markdown("### 詳細財務分析")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            # 公司選擇
+            company_for_detail = st.selectbox(
+                "選擇公司",
+                selected_companies,
+                key="company_detail"
+            )
+        
+        with col2:
+            # 年度選擇
+            available_years = self.financial_data.get_years()
+            if years_range == 5:
+                display_years = available_years[-5:]
+            else:
+                display_years = available_years[-10:]
             
-            # 獲取公司可用的年份
-            code = self.financial_data.get_company_code(company)
-            company_data = self.financial_data.df[self.financial_data.df['公司代號'] == code]
-            available_years = sorted(company_data['年份'].unique())
-            
-            if not available_years:
-                st.warning(f"找不到 {company} 的數據")
-                continue
-                
             selected_year = st.selectbox(
-                f"選擇年度 ({company})",
-                available_years,
-                index=len(available_years)-1,  # 預設選擇最新年份
-                format_func=lambda x: f"{x}年"  # 顯示年份格式
+                "選擇年度",
+                display_years,
+                index=len(display_years)-1,
+                format_func=lambda x: f"{x}年",
+                key="year_detail"
+            )
+        
+        # 生成比較表格
+        df, prev_year = self.chart_generator.generate_comparison_table(company_for_detail, int(selected_year))
+        
+        if not df.empty:
+            st.markdown(f"#### {company_for_detail} ({self.financial_data.get_company_code(company_for_detail)}) {selected_year}年 vs {prev_year}年 財務比較")
+            
+            # 顯示表格
+            st.dataframe(
+                df,
+                use_container_width=True,
+                hide_index=True
             )
             
-            df, prev_year = self.chart_generator.generate_comparison_table(company, selected_year)
-            if not df.empty:
-                st.table(df)
-                risks, highlights = self.financial_data.get_risk_highlight(company, str(selected_year))
-                st.markdown(f"**風險:** {', '.join(risks)}\n**亮點:** {', '.join(highlights)}")
+            # 風險與亮點分析
+            st.markdown("#### 投資風險與亮點分析")
+            
+            risks, highlights = self.financial_data.get_risk_highlight(company_for_detail, selected_year)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown('<div class="risk">', unsafe_allow_html=True)
+                st.markdown("##### 潛在風險")
+                for risk in risks:
+                    st.markdown(f"- {risk}")
+                st.markdown('</div>', unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown('<div class="opportunity">', unsafe_allow_html=True)
+                st.markdown("##### 投資亮點")
+                for highlight in highlights:
+                    st.markdown(f"- {highlight}")
+                st.markdown('</div>', unsafe_allow_html=True)
+        else:
+            st.warning("無法生成比較表格，請檢查數據源")
 
 # 執行應用程序
 if __name__ == "__main__":
     app = FinancialAnalysisApp()
-    app.run()
+    app.run() 
