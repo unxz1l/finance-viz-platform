@@ -221,9 +221,9 @@ class ChartGenerator:
                 ))
             
             fig.update_layout(
-                title=f"{self.financial_data.metric_names[metric]} 趨勢圖",
+                title=f"{metric} 趨勢圖",
                 xaxis_title="年度",
-                yaxis_title=self.financial_data.metric_names[metric],
+                yaxis_title=metric,
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
@@ -231,63 +231,54 @@ class ChartGenerator:
                     xanchor="right",
                     x=1
                 ),
+                margin=dict(l=40, r=40, t=60, b=40),
                 template="seaborn",
-                height=500,
-            )
-            
-            # 添加年度標籤
-            fig.update_xaxes(
-                ticktext=[f"{year}年" for year in years],
-                tickvals=years
+                height=500
             )
             
             return fig
             
         except Exception as e:
-            st.error(f"生成圖表時出錯: {str(e)}")
-            return None
+            st.error(f"圖表生成錯誤: {str(e)}")
+            return go.Figure()
 
-    def generate_comparison_table(self, company, year):
-        """生成年度比較表格數據"""
-        try:
-            code = self.financial_data.get_company_code(company)
-            if code is None:
-                return []
+    def generate_comparison_table(self, company_name, year):
+        """生成比較表格"""
+        code = self.financial_data.get_company_code(company_name)
+        company_data = self.financial_data.df[self.financial_data.df['公司代號'] == code].copy()
+        
+        # 獲取可用的年份
+        available_years = sorted(company_data['年份'].unique())
+        if year not in available_years:
+            st.warning(f"找不到 {year} 年的數據")
+            return pd.DataFrame(), None
             
-            company_data = self.financial_data.df[self.financial_data.df['公司代號'] == code].copy()
+        prev_year = year - 1
+        if prev_year not in available_years:
+            st.warning(f"找不到 {prev_year} 年的數據")
+            return pd.DataFrame(), None
             
-            if company_data.empty or year not in company_data['年份'].values:
-                return []
-            
-            prev_year = year - 1
-            if prev_year not in company_data['年份'].values:
-                return []
-            
-            current_data = company_data[company_data['年份'] == year].iloc[0]
-            prev_data = company_data[company_data['年份'] == prev_year].iloc[0]
-            
-            comparison_data = []
-            
-            for metric, display_name in self.financial_data.metric_names.items():
-                if metric in current_data and metric in prev_data:
-                    current_value = float(current_data[metric])
-                    prev_value = float(prev_data[metric])
-                    change = current_value - prev_value
-                    change_percent = (change / prev_value * 100) if prev_value != 0 else 0
-                    
-                    comparison_data.append({
-                        "指標": display_name,
-                        "當年": f"{current_value:.2f}",
-                        "去年": f"{prev_value:.2f}",
-                        "變動": f"{change:.2f}",
-                        "變動率": f"{change_percent:.2f}%"
-                    })
-            
-            return comparison_data
-            
-        except Exception as e:
-            st.error(f"生成比較表格時出錯: {str(e)}")
-            return []
+        data = []
+        for metric in self.financial_data.get_metric_names():
+            name = self.financial_data.get_metric_names()[metric]
+            try:
+                current_value = float(company_data[company_data['年份'] == year][name].values[0])
+                prev_value = float(company_data[company_data['年份'] == prev_year][name].values[0])
+                change = current_value - prev_value
+                change_percent = (change / prev_value * 100) if prev_value != 0 else 0
+                change_direction = "↑" if change > 0 else "↓"
+                
+                data.append({
+                    "財務指標": name,
+                    f"{year}年": f"{current_value:.2f}",
+                    f"{prev_year}年": f"{prev_value:.2f}",
+                    "變化": f"{change_direction} {abs(change):.2f} ({abs(change_percent):.2f}%)"
+                })
+            except (ValueError, TypeError):
+                # 如果無法轉換為數值，則跳過該指標
+                continue
+        
+        return pd.DataFrame(data), prev_year
 
 # Streamlit App 類
 class FinancialAnalysisApp:
@@ -301,14 +292,11 @@ class FinancialAnalysisApp:
         st.sidebar.markdown("### 選擇分析參數")
         
         # 公司多選
-        selected_company_names = st.sidebar.multiselect(
+        selected_companies = st.sidebar.multiselect(
             "選擇感興趣的公司",
-            list(self.financial_data.company_names.keys()),
-            default=[list(self.financial_data.company_names.keys())[0]]
+            self.financial_data.get_company_names(),
+            default=[self.financial_data.get_company_names()[0]]
         )
-        
-        # 創建選定公司的字典 {name: code}
-        selected_companies = {name: self.financial_data.company_names[name] for name in selected_company_names if name in self.financial_data.company_names}
         
         # 時間範圍選擇
         years_range = st.sidebar.radio(
@@ -353,7 +341,7 @@ class FinancialAnalysisApp:
             # 公司選擇
             company_for_detail = st.selectbox(
                 "選擇公司",
-                selected_company_names,
+                selected_companies,
                 key="company_detail"
             )
         
@@ -374,13 +362,12 @@ class FinancialAnalysisApp:
             )
         
         # 生成比較表格
-        comparison_data = self.chart_generator.generate_comparison_table(company_for_detail, int(selected_year))
+        df, prev_year = self.chart_generator.generate_comparison_table(company_for_detail, int(selected_year))
         
-        if comparison_data:
-            st.markdown(f"#### {company_for_detail} ({self.financial_data.company_names[company_for_detail]}) {selected_year}年 vs {selected_year-1}年 財務比較")
+        if not df.empty:
+            st.markdown(f"#### {company_for_detail} ({self.financial_data.get_company_code(company_for_detail)}) {selected_year}年 vs {prev_year}年 財務比較")
             
             # 顯示表格
-            df = pd.DataFrame(comparison_data)
             st.dataframe(
                 df,
                 use_container_width=True,
@@ -407,107 +394,6 @@ class FinancialAnalysisApp:
                 for highlight in highlights:
                     st.markdown(f"- {highlight}")
                 st.markdown('</div>', unsafe_allow_html=True)
-            
-            # 公司基本資訊卡片
-            st.markdown("#### 公司基本資訊")
-            
-            company_info = {
-                "王品股份有限公司": {
-                    "full_name": "王品集團",
-                    "industry": "連鎖餐飲",
-                    "founded": "1993年",
-                    "stores": "超過400家門市",
-                    "description": "台灣知名連鎖餐飲集團，旗下擁有王品牛排、陶板屋、西堤、夏慕尼等多個品牌。"
-                },
-                "瓦城泰統股份有限公司": {
-                    "full_name": "瓦城泰統集團",
-                    "industry": "連鎖餐飲",
-                    "founded": "1990年",
-                    "stores": "超過100家門市",
-                    "description": "以泰式料理起家，旗下擁有瓦城、非常泰、1010湘、十食湘、時時香、YABI等多個品牌。"
-                },
-                "八方雲集國際股份有限公司": {
-                    "full_name": "八方雲集",
-                    "industry": "連鎖餐飲",
-                    "founded": "1998年",
-                    "stores": "超過1,000家門市",
-                    "description": "以平價美食聞名，主打鍋貼、水餃等中式點心，在台灣、中國、美國等地均有據點。"
-                },
-                "安心食品服務股份有限公司": {
-                    "full_name": "安心食品",
-                    "industry": "連鎖餐飲",
-                    "founded": "1996年",
-                    "stores": "超過200家門市",
-                    "description": "以平價美食聞名，旗下擁有多個中式、日式、西式餐飲品牌，主打年輕消費族群。"
-                },
-                "漢來美食股份有限公司": {
-                    "full_name": "漢來美食",
-                    "industry": "連鎖餐飲",
-                    "founded": "1995年",
-                    "stores": "超過50家門市",
-                    "description": "以高檔中餐起家，旗下擁有漢來海港、漢來蔬食等多個品牌，主打精緻餐飲服務。"
-                },
-                "全家國際餐飲股份有限公司": {
-                    "full_name": "全家國際餐飲",
-                    "industry": "連鎖餐飲",
-                    "founded": "2000年",
-                    "stores": "超過100家門市",
-                    "description": "以日式料理為主，旗下擁有多個品牌，主打精緻日式餐飲服務。"
-                },
-                "三商餐飲股份有限公司": {
-                    "full_name": "三商餐飲",
-                    "industry": "連鎖餐飲",
-                    "founded": "1992年",
-                    "stores": "超過300家門市",
-                    "description": "以平價美食聞名，旗下擁有多個品牌，主打年輕消費族群。"
-                },
-                "豆府股份有限公司": {
-                    "full_name": "豆府",
-                    "industry": "連鎖餐飲",
-                    "founded": "2005年",
-                    "stores": "超過50家門市",
-                    "description": "以韓式料理為主，主打平價韓式美食，深受年輕族群喜愛。"
-                },
-                "皇家國際美食股份有限公司": {
-                    "full_name": "皇家國際美食",
-                    "industry": "連鎖餐飲",
-                    "founded": "2008年",
-                    "stores": "超過30家門市",
-                    "description": "以高檔西式料理為主，主打精緻西式餐飲服務。"
-                },
-                "美食-KY股份有限公司": {
-                    "full_name": "美食-KY",
-                    "industry": "連鎖餐飲",
-                    "founded": "2002年",
-                    "stores": "超過1,000家門市",
-                    "description": "以85度C品牌聞名，主打平價咖啡與甜點，在台灣、中國、美國等地均有據點。"
-                },
-                "六角國際事業股份有限公司": {
-                    "full_name": "六角國際",
-                    "industry": "連鎖餐飲",
-                    "founded": "2004年",
-                    "stores": "超過100家門市",
-                    "description": "以Chatime日出茶太品牌聞名，主打手搖飲料，在台灣、中國、東南亞等地均有據點。"
-                }
-            }
-            
-            company_info = company_info.get(company_for_detail, {
-                "full_name": company_for_detail,
-                "industry": "餐飲業",
-                "founded": "未知",
-                "stores": "未知",
-                "description": f"{company_for_detail}是一家餐飲業公司。"
-            })
-            
-            st.markdown(f"""
-            <div class="highlight">
-                <h5>{company_for_detail} ({self.financial_data.company_names[company_for_detail]}) - {company_info.get('full_name', '')}</h5>
-                <p><strong>產業類別:</strong> {company_info.get('industry', '')}</p>
-                <p><strong>成立時間:</strong> {company_info.get('founded', '')}</p>
-                <p><strong>門市規模:</strong> {company_info.get('stores', '')}</p>
-                <p><strong>公司簡介:</strong> {company_info.get('description', '')}</p>
-            </div>
-            """, unsafe_allow_html=True)
         else:
             st.warning("無法生成比較表格，請檢查數據源")
 
