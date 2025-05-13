@@ -71,34 +71,34 @@ class FinancialData:
         
         # 建立公司代碼與名稱的對應
         self.company_names = {
-            "2723": "美食-KY",
-            "2727": "王品",
-            "2729": "瓦城",
-            "2732": "六角",
-            "1268": "漢來美食"
+            "美食-KY": "2723",
+            "王品": "2727",
+            "瓦城": "2729",
+            "六角": "2732",
+            "漢來美食": "1268"
         }
         
         # 定義指標名稱對應
         self.metric_names = {
-            "debt_ratio": "財務結構-負債佔資產比率(%)",
-            "long_term_funds_to_fixed_assets": "財務結構-長期資金佔不動產、廠房及設備比率(%)",
-            "current_ratio": "償債能力-流動比率(%)",
-            "quick_ratio": "償債能力-速動比率(%)",
-            "interest_coverage": "償債能力-利息保障倍數(%)",
-            "receivable_turnover": "經營能力-應收款項週轉率(次)",
-            "average_collection_days": "經營能力-平均收現日數",
-            "inventory_turnover": "經營能力-存貨週轉率(次)",
-            "average_days_sales": "經營能力-平均售貨日數",
-            "fixed_asset_turnover": "經營能力-不動產、廠房及設備週轉率(次)",
-            "asset_turnover": "經營能力-總資產週轉率(次)",
-            "roa": "獲利能力-資產報酬率(%)",
-            "roe": "獲利能力-權益報酬率(%)",
-            "pretax_profit_to_paidin_capital": "獲利能力-稅前純益佔實收資本比率(%)",
-            "profit_margin": "獲利能力-純益率(%)",
-            "eps": "獲利能力-每股盈餘(元)",
-            "cash_flow_ratio": "現金流量-現金流量比率(%)",
-            "cash_flow_adequacy": "現金流量-現金流量允當比率(%)",
-            "reinvestment_ratio": "現金流量-現金再投<br>資比率(%)"
+            "財務結構-負債佔資產比率(%)": "財務結構-負債佔資產比率(%)",
+            "財務結構-長期資金佔不動產、廠房及設備比率(%)": "財務結構-長期資金佔不動產、廠房及設備比率(%)",
+            "償債能力-流動比率(%)": "償債能力-流動比率(%)",
+            "償債能力-速動比率(%)": "償債能力-速動比率(%)",
+            "償債能力-利息保障倍數(%)": "償債能力-利息保障倍數(%)",
+            "經營能力-應收款項週轉率(次)": "經營能力-應收款項週轉率(次)",
+            "經營能力-平均收現日數": "經營能力-平均收現日數",
+            "經營能力-存貨週轉率(次)": "經營能力-存貨週轉率(次)",
+            "經營能力-平均售貨日數": "經營能力-平均售貨日數",
+            "經營能力-不動產、廠房及設備週轉率(次)": "經營能力-不動產、廠房及設備週轉率(次)",
+            "經營能力-總資產週轉率(次)": "經營能力-總資產週轉率(次)",
+            "獲利能力-資產報酬率(%)": "獲利能力-資產報酬率(%)",
+            "獲利能力-權益報酬率(%)": "獲利能力-權益報酬率(%)",
+            "獲利能力-稅前純益佔實收資本比率(%)": "獲利能力-稅前純益佔實收資本比率(%)",
+            "獲利能力-純益率(%)": "獲利能力-純益率(%)",
+            "獲利能力-每股盈餘(元)": "獲利能力-每股盈餘(元)",
+            "現金流量-現金流量比率(%)": "現金流量-現金流量比率(%)",
+            "現金流量-現金流量允當比率(%)": "現金流量-現金流量允當比率(%)",
+            "現金流量-現金再投資比率(%)": "現金流量-現金再投資比率(%)"
         }
         
         # 初始化風險與亮點分析數據
@@ -133,14 +133,11 @@ class FinancialData:
 
     def get_company_names(self):
         """獲取所有公司名稱"""
-        return list(self.company_names.values())
+        return list(self.company_names.keys())
 
     def get_company_code(self, company_name):
         """獲取公司代碼"""
-        for code, name in self.company_names.items():
-            if name == company_name:
-                return code
-        return None
+        return self.company_names.get(company_name)
 
     def get_years(self):
         """獲取所有年度"""
@@ -202,6 +199,7 @@ class ChartGenerator:
         """生成折線圖"""
         try:
             fig = go.Figure()
+            all_years = set()
             
             for company in selected_companies:
                 data = self.financial_data.get_data_for_years(company, metric, years_range)
@@ -210,6 +208,7 @@ class ChartGenerator:
                     
                 years = list(data.keys())
                 values = list(data.values())
+                all_years.update(years)
                 
                 fig.add_trace(go.Scatter(
                     x=years,
@@ -220,6 +219,10 @@ class ChartGenerator:
                     marker=dict(size=8)
                 ))
             
+            if not all_years:
+                st.error("沒有可用的數據來生成圖表")
+                return None
+                
             fig.update_layout(
                 title=f"{self.financial_data.metric_names[metric]} 趨勢圖",
                 xaxis_title="年度",
@@ -237,8 +240,8 @@ class ChartGenerator:
             
             # 添加年度標籤
             fig.update_xaxes(
-                ticktext=[f"{year}年" for year in years],
-                tickvals=years
+                ticktext=[f"{year}年" for year in sorted(all_years)],
+                tickvals=sorted(all_years)
             )
             
             return fig
@@ -256,6 +259,9 @@ class ChartGenerator:
             
             company_data = self.financial_data.df[self.financial_data.df['公司代號'] == code].copy()
             
+            # 確保年份是整數類型
+            company_data['年份'] = company_data['年份'].astype(int)
+            
             if company_data.empty or year not in company_data['年份'].values:
                 return []
             
@@ -270,18 +276,21 @@ class ChartGenerator:
             
             for metric, display_name in self.financial_data.metric_names.items():
                 if metric in current_data and metric in prev_data:
-                    current_value = float(current_data[metric])
-                    prev_value = float(prev_data[metric])
-                    change = current_value - prev_value
-                    change_percent = (change / prev_value * 100) if prev_value != 0 else 0
-                    
-                    comparison_data.append({
-                        "指標": display_name,
-                        "當年": f"{current_value:.2f}",
-                        "去年": f"{prev_value:.2f}",
-                        "變動": f"{change:.2f}",
-                        "變動率": f"{change_percent:.2f}%"
-                    })
+                    try:
+                        current_value = float(current_data[metric])
+                        prev_value = float(prev_data[metric])
+                        change = current_value - prev_value
+                        change_percent = (change / prev_value * 100) if prev_value != 0 else 0
+                        
+                        comparison_data.append({
+                            "指標": display_name,
+                            "當年": f"{current_value:.2f}",
+                            "去年": f"{prev_value:.2f}",
+                            "變動": f"{change:.2f}",
+                            "變動率": f"{change_percent:.2f}%"
+                        })
+                    except (ValueError, TypeError):
+                        continue
             
             return comparison_data
             
@@ -377,14 +386,39 @@ class FinancialAnalysisApp:
         comparison_data = self.chart_generator.generate_comparison_table(company_for_detail, int(selected_year))
         
         if comparison_data:
-            st.markdown(f"#### {company_for_detail} ({self.financial_data.company_names[company_for_detail]}) {selected_year}年 vs {selected_year-1}年 財務比較")
+            st.markdown(f"#### {company_for_detail} ({self.financial_data.company_names[company_for_detail]}) {selected_year}年 vs {int(selected_year)-1}年 財務比較")
             
             # 顯示表格
             df = pd.DataFrame(comparison_data)
+            
+            # 設置列配置，根據變動值設置顏色
+            column_config = {
+                "指標": st.column_config.TextColumn("指標", width="large"),
+                "當年": st.column_config.NumberColumn("當年", format="%.2f"),
+                "去年": st.column_config.NumberColumn("去年", format="%.2f"),
+                "變動": st.column_config.NumberColumn("變動", format="%.2f"),
+                "變動率": st.column_config.NumberColumn("變動率", format="%.2f%%")
+            }
+            
+            # 將變動率轉換為數值型
+            df['變動率'] = df['變動率'].str.rstrip('%').astype(float)
+            
+            # 設置條件格式
+            def style_negative_positive(val):
+                if val > 0:
+                    return 'background-color: #E5FFE5'  # 淺綠色
+                elif val < 0:
+                    return 'background-color: #FFE5E5'  # 淺紅色
+                return ''
+            
+            # 應用樣式
+            styled_df = df.style.applymap(style_negative_positive, subset=['變動率'])
+            
             st.dataframe(
-                df,
+                styled_df,
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
+                column_config=column_config
             )
             
             # 風險與亮點分析
@@ -412,82 +446,40 @@ class FinancialAnalysisApp:
             st.markdown("#### 公司基本資訊")
             
             company_info = {
-                "王品股份有限公司": {
+                "美食-KY": {
+                    "full_name": "美食-KY股份有限公司",
+                    "industry": "連鎖餐飲",
+                    "founded": "2002年",
+                    "stores": "超過1,000家門市",
+                    "description": "以85度C品牌聞名，主打平價咖啡與甜點，在台灣、中國、美國等地均有據點。"
+                },
+                "王品": {
                     "full_name": "王品集團",
                     "industry": "連鎖餐飲",
                     "founded": "1993年",
                     "stores": "超過400家門市",
                     "description": "台灣知名連鎖餐飲集團，旗下擁有王品牛排、陶板屋、西堤、夏慕尼等多個品牌。"
                 },
-                "瓦城泰統股份有限公司": {
+                "瓦城": {
                     "full_name": "瓦城泰統集團",
                     "industry": "連鎖餐飲",
                     "founded": "1990年",
                     "stores": "超過100家門市",
                     "description": "以泰式料理起家，旗下擁有瓦城、非常泰、1010湘、十食湘、時時香、YABI等多個品牌。"
                 },
-                "八方雲集國際股份有限公司": {
-                    "full_name": "八方雲集",
-                    "industry": "連鎖餐飲",
-                    "founded": "1998年",
-                    "stores": "超過1,000家門市",
-                    "description": "以平價美食聞名，主打鍋貼、水餃等中式點心，在台灣、中國、美國等地均有據點。"
-                },
-                "安心食品服務股份有限公司": {
-                    "full_name": "安心食品",
-                    "industry": "連鎖餐飲",
-                    "founded": "1996年",
-                    "stores": "超過200家門市",
-                    "description": "以平價美食聞名，旗下擁有多個中式、日式、西式餐飲品牌，主打年輕消費族群。"
-                },
-                "漢來美食股份有限公司": {
-                    "full_name": "漢來美食",
-                    "industry": "連鎖餐飲",
-                    "founded": "1995年",
-                    "stores": "超過50家門市",
-                    "description": "以高檔中餐起家，旗下擁有漢來海港、漢來蔬食等多個品牌，主打精緻餐飲服務。"
-                },
-                "全家國際餐飲股份有限公司": {
-                    "full_name": "全家國際餐飲",
-                    "industry": "連鎖餐飲",
-                    "founded": "2000年",
-                    "stores": "超過100家門市",
-                    "description": "以日式料理為主，旗下擁有多個品牌，主打精緻日式餐飲服務。"
-                },
-                "三商餐飲股份有限公司": {
-                    "full_name": "三商餐飲",
-                    "industry": "連鎖餐飲",
-                    "founded": "1992年",
-                    "stores": "超過300家門市",
-                    "description": "以平價美食聞名，旗下擁有多個品牌，主打年輕消費族群。"
-                },
-                "豆府股份有限公司": {
-                    "full_name": "豆府",
-                    "industry": "連鎖餐飲",
-                    "founded": "2005年",
-                    "stores": "超過50家門市",
-                    "description": "以韓式料理為主，主打平價韓式美食，深受年輕族群喜愛。"
-                },
-                "皇家國際美食股份有限公司": {
-                    "full_name": "皇家國際美食",
-                    "industry": "連鎖餐飲",
-                    "founded": "2008年",
-                    "stores": "超過30家門市",
-                    "description": "以高檔西式料理為主，主打精緻西式餐飲服務。"
-                },
-                "美食-KY股份有限公司": {
-                    "full_name": "美食-KY",
-                    "industry": "連鎖餐飲",
-                    "founded": "2002年",
-                    "stores": "超過1,000家門市",
-                    "description": "以85度C品牌聞名，主打平價咖啡與甜點，在台灣、中國、美國等地均有據點。"
-                },
-                "六角國際事業股份有限公司": {
+                "六角": {
                     "full_name": "六角國際",
                     "industry": "連鎖餐飲",
                     "founded": "2004年",
                     "stores": "超過100家門市",
                     "description": "以Chatime日出茶太品牌聞名，主打手搖飲料，在台灣、中國、東南亞等地均有據點。"
+                },
+                "漢來美食": {
+                    "full_name": "漢來美食",
+                    "industry": "連鎖餐飲",
+                    "founded": "1995年",
+                    "stores": "超過50家門市",
+                    "description": "以高檔中餐起家，旗下擁有漢來海港、漢來蔬食等多個品牌，主打精緻餐飲服務。"
                 }
             }
             
